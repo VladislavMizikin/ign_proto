@@ -107,7 +107,7 @@ typedef struct ign_proto
 	uint16_t payload_buf_sz;       ///< Размер буфера полезных данных
 
 	/* parsing state */
-	uint8_t st;                  ///< Текущее состояние парсера (ST_SOF0, ST_SOF1 и т. д.)
+	uint8_t st;                  ///< Текущее состояние парсера (ST_SOF0, ST_SOF1 и т.д.)
 	uint16_t payload_len;         ///< Ожидаемая длина полезной нагрузки
 	uint16_t payload_pos;        ///< Текущая позиция в буфере полезной нагрузки
 	uint8_t cmd;               ///< Код принятой команды
