@@ -69,6 +69,11 @@ ign_proto_rx_cb_t ign_proto_init(ign_proto_t *p,
 	return ign_proto_rx_bytes_impl;
 }
 
+ign_proto_t *ign_proto_get_ctx(void)
+{
+	return g_ctx;
+}
+
 /**
  * @brief Включает/отключает обработку базовых (CORE) команд протокола
  * @param p Указатель на контекст протокола

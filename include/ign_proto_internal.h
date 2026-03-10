@@ -96,4 +96,12 @@ ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
 ign_proto_status_t ign_proto_handle_core_cmd(ign_proto_t *p, uint8_t cmd,
 											 const uint8_t *payload, uint16_t payload_len);
 
+/**
+ * @brief Возвращает текущий глобальный контекст протокола (g_ctx).
+ * @return Указатель на активный ign_proto_t или NULL.
+ * @note Используется для интеграции boot/app диспетчеров, где сигнатура
+ *       callback не содержит указатель на контекст.
+ */
+ign_proto_t *ign_proto_get_ctx(void);
+
 /* Internal helpers are defined as `static` inside implementation units. */
