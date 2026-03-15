@@ -178,8 +178,12 @@ static void dispatch_frame(ign_proto_t *p)
 	if (crc_calc != crc_rx)
 	{
 		p->metrics.rx_frames_crc_err++;
+#ifdef IGN_PROTO_HOST_PASSIVE_RX
+		return;
+#else
 		ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_CRC);
 		return;
+#endif
 	}
 
 	p->metrics.rx_frames_ok++;
@@ -196,7 +200,9 @@ static void dispatch_frame(ign_proto_t *p)
 	}
 	if (st == IGN_PROTO_E_UNSUPPORTED)
 	{
+#ifndef IGN_PROTO_HOST_PASSIVE_RX
 		ign_proto_send_nack(p, p->cmd, IGN_NACK_UNSUPPORTED);
+#endif
 	}
 }
 
@@ -270,7 +276,9 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 				// Проверка, помещается ли полезная нагрузка в буфер
 				if (p->payload_len > p->payload_buf_sz)
 				{
+#ifndef IGN_PROTO_HOST_PASSIVE_RX
 					ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_LEN);
+#endif
 					parser_reset(p);
 					break;
 				}
