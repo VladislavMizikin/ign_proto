@@ -2,7 +2,10 @@
  * @file ign_proto.c
  * @author Мизикин Владислав
  * @date 26.02.2026
- * @brief Реализация основного функционала протокола IGN: инициализация, парсинг фреймов, обработка команд
+ * @brief Реализация протокола IGN.
+ *
+ * Содержит реализацию инициализации, приёма и парсинга входящих данных,
+ * обработки фреймов и диспетчеризации команд.
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -15,72 +18,65 @@
 /**
  * @brief Глобальный указатель на контекст протокола
  *
- * Используется для передачи контекста в callback‑функции приёма байтов.
+ * Используется для доступа к текущему контексту из callback-функции.
+ *
+ * @warning Не потокобезопасно. Поддерживается только один экземпляр протокола.
  */
 static ign_proto_t *g_ctx = NULL;
 
 /**
- * @brief Внутренняя функция обработки входящих байтов
- * @param data Указатель на массив входящих байтов
- * @param size Количество байтов в массиве
- * @details
- * Функция вызывается через callback, возвращённый ign_proto_init().
- * Обрабатывает байты по одному, обновляет состояние парсера и при
- * завершении фрейма вызывает dispatch_frame().
+ * @brief Внутренняя функция приёма байтов
  */
 static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size);
 
 /**
- * @brief Инициализирует контекст протокола IGN
- * @param p Указатель на структуру контекста протокола
- * @param cfg Указатель на конфигурацию протокола (должна содержать валидные функции)
- * @param payload_buf Указатель на буфер для полезных данных
- * @param payload_buf_sz Размер буфера полезных данных в байтах
- * @return Указатель на функцию приёма байтов (ign_proto_rx_cb_t) или NULL при ошибке
- * @details
- * Выполняет следующие действия:
- * 1. Проверяет валидность входных параметров.
- * 2. Обнуляет структуру контекста.
- * 3. Копирует конфигурацию и сохраняет указатель на буфер.
- * 4. Устанавливает начальное состояние парсера (ST_SOF0).
- * 5. Включает обработку CORE‑команд по умолчанию.
- * 6. Сохраняет глобальный указатель на контекст.
+ * @brief Инициализация контекста протокола IGN
  */
 ign_proto_rx_cb_t ign_proto_init(ign_proto_t *p,
 								 const ign_proto_cfg_t *cfg,
 								 uint8_t *payload_buf,
 								 uint16_t payload_buf_sz)
 {
-	// Проверка входных параметров
+	// Проверяем все критичные зависимости сразу
 	if (!p || !cfg || !cfg->tx_bytes || !cfg->crc_init || !cfg->crc_update || !cfg->crc_final || !cfg->dispatch ||
 		!payload_buf || payload_buf_sz == 0u)
 	{
 		return NULL;
 	}
 
+	// Полная очистка контекста — гарантируем отсутствие мусора
 	memset(p, 0, sizeof(*p));
+
+	// Копируем конфигурацию (функциональные указатели)
 	p->cfg = *cfg;
+
+	// Назначаем буфер для payload
 	p->payload_buf = payload_buf;
 	p->payload_buf_sz = payload_buf_sz;
+
+	// Парсер стартует с ожидания сигнатуры начала фрейма
 	p->st = ST_SOF0;
+
+	// По умолчанию разрешаем обработку CORE-команд
 	p->enable_core_cmds = 1u;
 
+	// Сохраняем глобальный контекст (используется в callback)
 	g_ctx = p;
+
+	// Возвращаем функцию, в которую пользователь будет "скармливать" байты
 	return ign_proto_rx_bytes_impl;
 }
 
+/**
+ * @brief Получение текущего контекста
+ */
 ign_proto_t *ign_proto_get_ctx(void)
 {
 	return g_ctx;
 }
 
 /**
- * @brief Включает/отключает обработку базовых (CORE) команд протокола
- * @param p Указатель на контекст протокола
- * @param enable Флаг включения (ненулевое значение — включить, 0 — отключить)
- * @details
- * Если обработка CORE‑команд отключена, все команды из диапазона 0x00–0x1F
- * будут передаваться в пользовательский диспетчер (cfg.dispatch).
+ * @brief Включение/отключение CORE-команд
  */
 void ign_proto_enable_core(ign_proto_t *p, int enable)
 {
@@ -88,43 +84,37 @@ void ign_proto_enable_core(ign_proto_t *p, int enable)
 	{
 		return;
 	}
+
+	// Приводим к строгому 0/1
 	p->enable_core_cmds = enable ? 1u : 0u;
 }
 
 /**
- * @brief Получает указатель на структуру метрик протокола
- * @param p Указатель на контекст протокола
- * @return Указатель на ign_proto_metrics_t или NULL, если p == NULL
+ * @brief Получение метрик
  */
 const ign_proto_metrics_t *ign_proto_metrics_get(const ign_proto_t *p)
 {
 	return p ? &p->metrics : NULL;
 }
 
-/**
- * @brief Увеличивает счётчик попыток установки соединения
- * @param p Указатель на контекст протокола
- */
 void ign_proto_metrics_install_attempt(ign_proto_t *p)
 {
 	if (!p)
 	{
 		return;
 	}
+
 	p->metrics.install_attempts++;
 }
 
-/**
- * @brief Фиксирует результат установки соединения (успех/ошибка)
- * @param p Указатель на контекст протокола
- * @param success Флаг успеха (ненулевое значение — успех, 0 — ошибка)
- */
 void ign_proto_metrics_install_result(ign_proto_t *p, int success)
 {
 	if (!p)
 	{
 		return;
 	}
+
+	// Разносим результат по разным счётчикам
 	if (success)
 	{
 		p->metrics.install_success++;
@@ -136,68 +126,69 @@ void ign_proto_metrics_install_result(ign_proto_t *p, int success)
 }
 
 /**
- * @brief Сбрасывает состояние парсера к начальному
- * @param p Указатель на контекст протокола
- * @details
- * Устанавливает:
- * - состояние ST_SOF0;
- * - длину полезной нагрузки 0;
- * - позицию в буфере 0;
- * - код команды 0;
- * - позицию CRC 0.
+ * @brief Сброс парсера
  */
 static void parser_reset(ign_proto_t *p)
 {
+	// Возврат в начальное состояние автомата
 	p->st = ST_SOF0;
+
+	// Сбрасываем накопленные данные текущего фрейма
 	p->payload_len = 0u;
 	p->payload_pos = 0u;
 	p->cmd = 0u;
+
+	// Подготовка к приёму CRC заново
 	p->crc_pos = 0u;
 }
 
 /**
- * @brief Обрабатывает завершённый фрейм (проверяет CRC, вызывает диспетчер команд)
- * @param p Указатель на контекст протокола
- * @details
- * Алгоритм:
- * 1. Восстанавливает принятый CRC32 из little‑endian.
- * 2. Сравнивает с рассчитанным CRC.
- * 3. При совпадении увеличивает счётчик корректных фреймов и вызывает диспетчер.
- * 4. При несовпадении отправляет NACK и увеличивает счётчик ошибок CRC.
+ * @brief Обработка готового фрейма
  */
 static void dispatch_frame(ign_proto_t *p)
 {
-	// Восстановление принятого CRC32 из little‑endian
+	// Собираем CRC из 4 байтов (little-endian)
 	uint32_t crc_rx = (uint32_t) p->crc_bytes[0]
 					  | ((uint32_t) p->crc_bytes[1] << 8)
 					  | ((uint32_t) p->crc_bytes[2] << 16)
 					  | ((uint32_t) p->crc_bytes[3] << 24);
 
-	// CRC накапливается в потоковом режиме во время парсинга (LEN + CMD + PAYLOAD)
+	// Получаем рассчитанный CRC (накопленный во время парсинга)
 	uint32_t crc_calc = p->cfg.crc_final();
+
+	// Проверка целостности фрейма
 	if (crc_calc != crc_rx)
 	{
 		p->metrics.rx_frames_crc_err++;
+
 #ifdef IGN_PROTO_HOST_PASSIVE_RX
+		// В пассивном режиме просто игнорируем ошибку
 		return;
 #else
+		// В активном режиме уведомляем отправителя
 		ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_CRC);
 		return;
 #endif
 	}
 
+	// Фрейм валидный
 	p->metrics.rx_frames_ok++;
 
 	ign_proto_status_t st = IGN_PROTO_E_UNSUPPORTED;
 
+	// Сначала даём шанс встроенным (CORE) командам
 	if (p->enable_core_cmds)
 	{
 		st = ign_proto_handle_core_cmd(p, p->cmd, p->payload_buf, p->payload_len);
 	}
+
+	// Если не обработано — передаём пользователю
 	if (st == IGN_PROTO_E_UNSUPPORTED)
 	{
 		st = p->cfg.dispatch(p->cmd, p->payload_buf, p->payload_len);
 	}
+
+	// Если никто не обработал — сигнализируем ошибку
 	if (st == IGN_PROTO_E_UNSUPPORTED)
 	{
 #ifndef IGN_PROTO_HOST_PASSIVE_RX
@@ -207,36 +198,30 @@ static void dispatch_frame(ign_proto_t *p)
 }
 
 /**
- * @brief Основная функция парсинга входящих байтов
- * @param data Указатель на массив входящих байтов
- * @param size Количество байтов в массиве
- * @details
- * Обрабатывает каждый байт в соответствии с текущим состоянием парсера (p->st):
- * - ST_SOF0: ожидание SOF0 (0xA5)
- * - ST_SOF1: ожидание SOF1 (0x5A), переход к ST_LEN0
- * - ST_LEN0/ST_LEN1: разбор длины полезной нагрузки (little‑endian)
- * - ST_CMD: сохранение кода команды, проверка размера буфера
- * - ST_PAYLOAD: запись данных в буфер полезной нагрузки, обновление CRC
- * - ST_CRC: приём байтов CRC32, завершение фрейма и его обработка
- * При ошибке или неизвестном состоянии парсер сбрасывается.
+ * @brief Парсинг входящего потока байтов
  */
 static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 {
 	ign_proto_t *p = g_ctx;
+
+	// Базовая защита от некорректных вызовов
 	if (!p || !data || size == 0u)
 	{
 		return;
 	}
 
+	// Учитываем общий трафик
 	p->metrics.rx_bytes += size;
 
 	for (uint32_t i = 0; i < size; i++)
 	{
 		uint8_t b = data[i];
 
+		// Конечный автомат парсинга
 		switch ((ign_proto_state_t) p->st)
 		{
 			case ST_SOF0:
+				// Ждём первый байт сигнатуры
 				if (b == IGN_SOF0)
 				{
 					p->st = ST_SOF1;
@@ -244,28 +229,34 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 				break;
 
 			case ST_SOF1:
+				// Ждём второй байт сигнатуры
 				if (b == IGN_SOF1)
 				{
 					p->st = ST_LEN0;
-					// Начало накопления CRC с байта длины (CRC покрывает LEN+CMD+PAYLOAD)
+
+					// Начинаем новый расчёт CRC (с поля длины)
 					p->cfg.crc_init();
 				}
 				else
 				{
-					// Неверная сигнатура — сброс парсера
+					// Ложное срабатывание — начинаем заново
 					p->st = ST_SOF0;
 				}
 				break;
 
 			case ST_LEN0:
+				// Младший байт длины
 				p->payload_len = (uint16_t) b;
 				p->cfg.crc_update(&b, 1u);
 				p->st = ST_LEN1;
 				break;
 
 			case ST_LEN1:
+				// Старший байт длины
 				p->payload_len |= ((uint16_t) b << 8);
 				p->cfg.crc_update(&b, 1u);
+
+				// Готовимся принимать payload
 				p->payload_pos = 0u;
 				p->st = ST_CMD;
 				break;
@@ -273,7 +264,8 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 			case ST_CMD:
 				p->cmd = b;
 				p->cfg.crc_update(&b, 1u);
-				// Проверка, помещается ли полезная нагрузка в буфер
+
+				// Проверка на переполнение буфера
 				if (p->payload_len > p->payload_buf_sz)
 				{
 #ifndef IGN_PROTO_HOST_PASSIVE_RX
@@ -282,15 +274,17 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 					parser_reset(p);
 					break;
 				}
-				// Переход к следующему состоянию: если длина 0, сразу к CRC, иначе к PAYLOAD
+
+				// Если payload пустой — сразу идём к CRC
 				p->st = (p->payload_len == 0u) ? ST_CRC : ST_PAYLOAD;
 				break;
 
 			case ST_PAYLOAD:
-				// Буфер уже проверен в ST_CMD, тут просто пишем данные
+				// Пишем данные в буфер
 				p->payload_buf[p->payload_pos++] = b;
 				p->cfg.crc_update(&b, 1u);
 
+				// Если всё получили — переходим к CRC
 				if (p->payload_pos >= p->payload_len)
 				{
 					p->crc_pos = 0u;
@@ -299,22 +293,24 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 				break;
 
 			case ST_CRC:
+				// Принимаем CRC по байтам
 				if (p->crc_pos < 4u)
 				{
 					p->crc_bytes[p->crc_pos++] = b;
 				}
 
+				// CRC полностью получен — завершаем фрейм
 				if (p->crc_pos >= 4u)
 				{
-					// Завершение фрейма: проверка CRC и диспетчеризация
 					dispatch_frame(p);
-					// После обработки — сброс парсера для приёма следующего фрейма
+
+					// Готовимся к следующему фрейму
 					parser_reset(p);
 				}
 				break;
 
 			default:
-				// Неизвестное состояние — сброс парсера к начальному
+				// Любое неизвестное состояние — полный сброс автомата
 				parser_reset(p);
 				break;
 		}

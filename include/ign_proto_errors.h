@@ -1,70 +1,54 @@
 /**
  * @file ign_proto_errors.h
- * @author Мизикин Владислав
- * @date 26.02.2026
- * @brief Заголовочный файл с определениями кодов ошибок протокола IGN
- *
- * Содержит перечисления статусов выполнения операций и кодов ошибок для NACK‑ответов.
+ * @brief Коды статусов и NACK-ошибок протокола IGN
  */
-
-/* Directive to prevent recursive inclusion ----------------------------------*/
 
 #pragma once
 
-/* Includes ------------------------------------------------------------------*/
-
 #include <stdint.h>
 
-/* Exported types -----------------------------------------------------------*/
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @brief Статус выполнения операций протокола IGN
- *
- * Перечисление кодов возврата функций протокола. Положительные значения
- * (включая 0) означают успех, отрицательные — различные ошибки.
  */
 typedef enum
 {
-	IGN_PROTO_OK = 0,           ///< Операция выполнена успешно
-	IGN_PROTO_E_ARG = -1,    ///< Некорректные входные аргументы
-	IGN_PROTO_E_CRC = -2,   ///< Ошибка контрольной суммы (CRC)
-	IGN_PROTO_E_FRAME = -3,  ///< Ошибка формата фрейма (неверная структура)
-	IGN_PROTO_E_TX = -4,    ///< Ошибка передачи данных
-	IGN_PROTO_E_UNSUPPORTED = -5, ///< Команда не поддерживается
-	IGN_PROTO_E_INTERNAL = -6  ///< Внутренняя ошибка протокола/устройства
+	IGN_PROTO_OK = 0,
+	IGN_PROTO_E_ARG = -1,
+	IGN_PROTO_E_CRC = -2,
+	IGN_PROTO_E_FRAME = -3,
+	IGN_PROTO_E_TX = -4,
+	IGN_PROTO_E_UNSUPPORTED = -5,
+	IGN_PROTO_E_INTERNAL = -6
 } ign_proto_status_t;
 
 /**
- * @brief Коды ошибок для NACK‑ответов (передаются в payload[0])
- *
- * Используются в отрицательных подтверждениях (NACK) для указания причины
- * отказа в выполнении команды. Значения подобраны так, чтобы:
- * - занимать 1 байт (удобно для передачи);
- * - иметь «читаемые» шестнадцатеричные значения;
- * - разделять категории ошибок (формат, CRC, поддержка и т. д.).
+ * @brief Коды ошибок для NACK
  */
 typedef enum
 {
-	IGN_NACK_BAD_LEN = 0x01,     ///< Некорректная длина полезной нагрузки
-	IGN_NACK_BAD_CRC = 0x02,   ///< Ошибка контрольной суммы (CRC не совпала)
-	IGN_NACK_BAD_FRAME = 0x03, ///< Ошибка формата фрейма (нарушена структура)
-	IGN_NACK_UNSUPPORTED = 0x07, ///< Команда не поддерживается устройством
-	IGN_NACK_INTERNAL = 0x0F      ///< Внутренняя ошибка устройства (переполнение буфера, нехватка памяти и т. п.)
+	IGN_NACK_BAD_LEN = 0x01,
+	IGN_NACK_BAD_CRC = 0x02,
+	IGN_NACK_BAD_FRAME = 0x03,
+	IGN_NACK_UNSUPPORTED = 0x07,
+	IGN_NACK_INTERNAL = 0x0F,
+
+	/* Stage 3 */
+	IGN_NACK_UNKNOWN_OBJECT = 0x10,
+	IGN_NACK_BAD_TYPE = 0x11,
+	IGN_NACK_OUT_OF_RANGE = 0x12,
+	IGN_NACK_INVALID_SESSION = 0x13,
+	IGN_NACK_READ_ONLY = 0x14,
+	IGN_NACK_NOT_SUPPORTED = 0x15
 } ign_nack_code_t;
 
-/**
- * @brief Вспомогательная функция для преобразования статуса в читаемую строку
- * @param status Код статуса из ign_proto_status_t
- * @return Указатель на строку с описанием ошибки или "Unknown error"
- * @details
- * Может использоваться для логирования и отладки. Пример:
- * ```c
- * printf("Protocol error: %s\n", ign_proto_status_to_str(err));
- * ```
- */
-static inline const char* ign_proto_status_to_str(ign_proto_status_t status)
+static inline const char *ign_proto_status_to_str(ign_proto_status_t status)
 {
-	switch (status) {
+	switch (status)
+	{
 		case IGN_PROTO_OK:
 			return "OK";
 		case IGN_PROTO_E_ARG:
@@ -84,16 +68,10 @@ static inline const char* ign_proto_status_to_str(ign_proto_status_t status)
 	}
 }
 
-/**
- * @brief Вспомогательная функция для преобразования кода NACK в читаемую строку
- * @param code Код ошибки из ign_nack_code_t
- * @return Указатель на строку с описанием ошибки или "Unknown NACK code"
- * @details
- * Удобна для логирования принятых NACK‑ответов и анализа причин ошибок.
- */
-static inline const char* ign_nack_code_to_str(ign_nack_code_t code)
+static inline const char *ign_nack_code_to_str(ign_nack_code_t code)
 {
-	switch (code) {
+	switch (code)
+	{
 		case IGN_NACK_BAD_LEN:
 			return "Bad payload length";
 		case IGN_NACK_BAD_CRC:
@@ -104,7 +82,23 @@ static inline const char* ign_nack_code_to_str(ign_nack_code_t code)
 			return "Command not supported";
 		case IGN_NACK_INTERNAL:
 			return "Internal device error";
+		case IGN_NACK_UNKNOWN_OBJECT:
+			return "Unknown object";
+		case IGN_NACK_BAD_TYPE:
+			return "Bad type";
+		case IGN_NACK_OUT_OF_RANGE:
+			return "Out of range";
+		case IGN_NACK_INVALID_SESSION:
+			return "Invalid session";
+		case IGN_NACK_READ_ONLY:
+			return "Read only";
+		case IGN_NACK_NOT_SUPPORTED:
+			return "Not supported";
 		default:
 			return "Unknown NACK code";
 	}
 }
+
+#ifdef __cplusplus
+}
+#endif
