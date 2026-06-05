@@ -70,6 +70,16 @@
 /** @} */
 
 /**
+ * @defgroup IGN_CMD_APP_VALUES Runtime telemetry commands
+ * @brief Команды текущих runtime-значений и истории событий APP.
+ * @{
+ */
+#define IGN_CMD_APP_VALUES_LIST      0x57u  ///< Получить каталог runtime-значений
+#define IGN_CMD_APP_VALUES_SNAPSHOT  0x58u  ///< Получить initial snapshot runtime-значений
+#define IGN_CMD_APP_VALUES_GET_DELTA 0x59u  ///< Получить накопленные изменения runtime-значений и событий
+/** @} */
+
+/**
  * @defgroup IGN_CMD_RESP Response commands (0x7E–0x7F)
  * @brief Служебные команды ответа
  *
