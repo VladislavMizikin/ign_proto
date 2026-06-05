@@ -32,6 +32,7 @@ static int dummy_tx(const uint8_t *data, uint32_t len)
 /**
  * @brief Обработчик команд для тестовой сборки
  * @param cmd Код команды
+ * @param request_id Идентификатор транзакции
  * @param payload Указатель на полезные данные
  * @param payload_len Длина полезных данных в байтах
  * @return IGN_PROTO_E_UNSUPPORTED (все команды не поддерживаются)
@@ -39,10 +40,11 @@ static int dummy_tx(const uint8_t *data, uint32_t len)
  * В тестах используется заглушка, которая не обрабатывает никакие команды.
  * Позволяет проверить инициализацию и базовую работу парсера.
  */
-ign_proto_status_t ign_proto_cmd_dispatch(uint8_t cmd, const uint8_t *payload, uint16_t payload_len)
+ign_proto_status_t ign_proto_cmd_dispatch(uint8_t cmd, uint16_t request_id, const uint8_t *payload, uint16_t payload_len)
 {
 	(void)cmd;
 	(void)payload;
+	(void)request_id;
 	(void)payload_len;
 	return IGN_PROTO_E_UNSUPPORTED;
 }
@@ -85,7 +87,7 @@ int main(void)
 
 	// Тестовый сценарий: отправка ACK
 	printf("[3] Testing ACK transmission...\n");
-	ign_proto_status_t status = ign_proto_send_ack(&p, IGN_CMD_HELLO);
+	ign_proto_status_t status = ign_proto_send_ack(&p, IGN_CMD_HELLO, 1u);
 	if (status == IGN_PROTO_OK) {
 		printf("SUCCESS: ACK sent for CMD_HELLO\n");
 	} else {
@@ -96,7 +98,7 @@ int main(void)
 
 	// Тестовый сценарий: отправка NACK
 	printf("[4] Testing NACK transmission...\n");
-	status = ign_proto_send_nack(&p, IGN_CMD_BOOT_MIN, IGN_NACK_BAD_LEN);
+	status = ign_proto_send_nack(&p, IGN_CMD_BOOT_MIN, IGN_NACK_BAD_LEN, 2u);
 	if (status == IGN_PROTO_OK) {
 		printf("SUCCESS: NACK sent for CMD_BOOT_MIN (code: BAD_LEN)\n");
 	} else {
@@ -107,8 +109,8 @@ int main(void)
 
 	// Тестовый сценарий: имитация приёма байтов
 	printf("[5] Testing byte reception...\n");
-	// Последовательность байтов: SOF0, SOF1, LEN0=0, LEN1=0, CMD=0x01 (HELLO), CRC×4
-	uint8_t test_data[] = {0xA5, 0x5A, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
+	// Последовательность байтов: SOF0, SOF1, LEN=0, REQ=1, CMD=0x01 (HELLO), CRC×4
+	uint8_t test_data[] = {0xA5, 0x5A, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
 	cb(test_data, sizeof(test_data));
 
 	// Проверка обновления метрик после приёма данных

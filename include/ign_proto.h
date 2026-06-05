@@ -86,12 +86,13 @@ typedef uint32_t (*ign_proto_crc_final_fn)(void);
  * Вызывается при успешном разборе входящего фрейма.
  *
  * @param cmd Код команды
+ * @param request_id Идентификатор транзакции команды
  * @param payload Указатель на полезные данные (может быть NULL, если payload_len == 0)
  * @param payload_len Длина полезных данных в байтах
  * @return Статус выполнения команды (IGN_PROTO_OK при успехе)
  */
 typedef ign_proto_status_t (*ign_proto_cmd_dispatch_fn)(
-		uint8_t cmd, const uint8_t *payload, uint16_t payload_len);
+		uint8_t cmd, uint16_t request_id, const uint8_t *payload, uint16_t payload_len);
 
 /**
  * @brief Конфигурация протокола IGN
@@ -136,6 +137,7 @@ typedef struct ign_proto
 	uint16_t payload_len;           ///< Ожидаемая длина полезной нагрузки
 	uint16_t payload_pos;           ///< Текущая позиция записи в payload_buf
 	uint8_t cmd;                    ///< Код текущей обрабатываемой команды
+	uint16_t request_id;             ///< Идентификатор текущей транзакции
 
 	uint8_t crc_bytes[4];           ///< Буфер для хранения принятых байтов CRC32
 	uint8_t crc_pos;                ///< Текущая позиция в буфере CRC
@@ -197,9 +199,10 @@ void ign_proto_metrics_install_result(ign_proto_t *p, int success);
  *
  * @param p Указатель на контекст протокола
  * @param orig_cmd Код команды, для которой отправляется подтверждение
+ * @param request_id Идентификатор подтверждаемой транзакции
  * @return Статус выполнения (IGN_PROTO_OK при успехе)
  */
-ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd);
+ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd, uint16_t request_id);
 
 /**
  * @brief Отправка отрицательного подтверждения (NACK)
@@ -207,9 +210,10 @@ ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd);
  * @param p Указатель на контекст протокола
  * @param orig_cmd Код команды, вызвавшей ошибку
  * @param nack_code Код ошибки (определяется протоколом)
+ * @param request_id Идентификатор отклоняемой транзакции
  * @return Статус выполнения (IGN_PROTO_OK при успехе)
  */
-ign_proto_status_t ign_proto_send_nack(ign_proto_t *p, uint8_t orig_cmd, uint8_t nack_code);
+ign_proto_status_t ign_proto_send_nack(ign_proto_t *p, uint8_t orig_cmd, uint8_t nack_code, uint16_t request_id);
 
 /**
  * @brief Включение или отключение обработки базовых команд

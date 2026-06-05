@@ -137,6 +137,7 @@ static void parser_reset(ign_proto_t *p)
 	p->payload_len = 0u;
 	p->payload_pos = 0u;
 	p->cmd = 0u;
+	p->request_id = 0u;
 
 	// Подготовка к приёму CRC заново
 	p->crc_pos = 0u;
@@ -166,7 +167,7 @@ static void dispatch_frame(ign_proto_t *p)
 		return;
 #else
 		// В активном режиме уведомляем отправителя
-		ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_CRC);
+		ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_CRC, p->request_id);
 		return;
 #endif
 	}
@@ -179,20 +180,20 @@ static void dispatch_frame(ign_proto_t *p)
 	// Сначала даём шанс встроенным (CORE) командам
 	if (p->enable_core_cmds)
 	{
-		st = ign_proto_handle_core_cmd(p, p->cmd, p->payload_buf, p->payload_len);
+		st = ign_proto_handle_core_cmd(p, p->cmd, p->request_id, p->payload_buf, p->payload_len);
 	}
 
 	// Если не обработано — передаём пользователю
 	if (st == IGN_PROTO_E_UNSUPPORTED)
 	{
-		st = p->cfg.dispatch(p->cmd, p->payload_buf, p->payload_len);
+		st = p->cfg.dispatch(p->cmd, p->request_id, p->payload_buf, p->payload_len);
 	}
 
 	// Если никто не обработал — сигнализируем ошибку
 	if (st == IGN_PROTO_E_UNSUPPORTED)
 	{
 #ifndef IGN_PROTO_HOST_PASSIVE_RX
-		ign_proto_send_nack(p, p->cmd, IGN_NACK_UNSUPPORTED);
+		ign_proto_send_nack(p, p->cmd, IGN_NACK_UNSUPPORTED, p->request_id);
 #endif
 	}
 }
@@ -258,6 +259,18 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 
 				// Готовимся принимать payload
 				p->payload_pos = 0u;
+				p->st = ST_REQ0;
+				break;
+
+			case ST_REQ0:
+				p->request_id = (uint16_t) b;
+				p->cfg.crc_update(&b, 1u);
+				p->st = ST_REQ1;
+				break;
+
+			case ST_REQ1:
+				p->request_id |= ((uint16_t) b << 8);
+				p->cfg.crc_update(&b, 1u);
 				p->st = ST_CMD;
 				break;
 
@@ -269,7 +282,7 @@ static void ign_proto_rx_bytes_impl(const uint8_t *data, uint32_t size)
 				if (p->payload_len > p->payload_buf_sz)
 				{
 #ifndef IGN_PROTO_HOST_PASSIVE_RX
-					ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_LEN);
+					ign_proto_send_nack(p, p->cmd, IGN_NACK_BAD_LEN, p->request_id);
 #endif
 					parser_reset(p);
 					break;

@@ -17,6 +17,7 @@
  *
  * @param p Указатель на контекст протокола IGN (не должен быть NULL)
  * @param cmd Код команды для отправки (1 байт)
+ * @param request_id Идентификатор транзакции
  * @param payload Указатель на буфер с полезными данными (может быть NULL, если payload_len == 0)
  * @param payload_len Длина полезных данных в байтах (0–512 байт)
  * @return Статус выполнения операции:
@@ -27,14 +28,16 @@
  *
  * @details
  * Формирует и отправляет фрейм следующего формата:
- * [SOF0][SOF1][LEN_L][LEN_H][CMD][PAYLOAD...][CRC32_LE]
+ * [SOF0][SOF1][LEN_L][LEN_H][REQ_L][REQ_H][CMD][PAYLOAD...][CRC32_LE]
  * - SOF: 2‑байтовая сигнатура начала кадра (0xAA, 0x55)
  * - LEN: 2‑байтное поле длины полезных данных (little‑endian)
+ * - REQ: 2-байтный идентификатор транзакции (little-endian)
  * - CMD: 1‑байт код команды
  * - PAYLOAD: опциональные данные (0–512 байт)
- * - CRC32: 4‑байт контрольная сумма (little‑endian), вычисляется от [LEN][CMD][PAYLOAD]
+ * - CRC32: 4‑байт контрольная сумма (little‑endian), вычисляется от [LEN][REQ][CMD][PAYLOAD]
  */
 ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
+									  uint16_t request_id,
 									  const uint8_t *payload, uint16_t payload_len)
 {
 	// Проверка входных параметров
@@ -45,17 +48,19 @@ ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
 		return IGN_PROTO_E_ARG;
 	}
 
-	// Формирование заголовка (5 байт): SOF + LEN + CMD
-	uint8_t hdr[5];
+	// Формирование заголовка (7 байт): SOF + LEN + request_id + CMD
+	uint8_t hdr[7];
 	hdr[0] = IGN_SOF0;  // 0xA5 — первый байт сигнатуры начала кадра
 	hdr[1] = IGN_SOF1;  // 0x5A — второй байт сигнатуры начала кадра
 	hdr[2] = (uint8_t)(payload_len & 0xFFu);        // LEN_L — младший байт длины
 	hdr[3] = (uint8_t)((payload_len >> 8) & 0xFFu); // LEN_H — старший байт длины
-	hdr[4] = cmd;                                   // CMD — код команды
+	hdr[4] = (uint8_t)(request_id & 0xFFu);      // REQ_L — младший байт request_id
+	hdr[5] = (uint8_t)((request_id >> 8) & 0xFFu); // REQ_H — старший байт request_id
+	hdr[6] = cmd;                                   // CMD — код команды
 
-	// Streaming CRC32 over [LEN][CMD][PAYLOAD]
+	// Streaming CRC32 over [LEN][REQ][CMD][PAYLOAD]
 	p->cfg.crc_init();
-	p->cfg.crc_update(&hdr[2], 3u); // LEN_L LEN_H CMD
+	p->cfg.crc_update(&hdr[2], 5u); // LEN_L LEN_H REQ_L REQ_H CMD
 	if (payload_len) {
 		p->cfg.crc_update(payload, payload_len);
 	}
@@ -87,15 +92,16 @@ ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
  * @brief Отправляет подтверждение (ACK) для указанной команды
  * @param p Указатель на контекст протокола IGN
  * @param orig_cmd Исходный код команды, для которой отправляется подтверждение
+ * @param request_id Идентификатор подтверждаемой транзакции
  * @return Статус выполнения (IGN_PROTO_OK при успехе)
  * @details
  * Отправляет фрейм с командой IGN_CMD_ACK и полезной нагрузкой из 1 байта:
  * [orig_cmd]
  */
-ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd)
+ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd, uint16_t request_id)
 {
 	uint8_t payload[1] = { orig_cmd };
-	return ign_proto_tx_frame(p, IGN_CMD_ACK, payload, 1u);
+	return ign_proto_tx_frame(p, IGN_CMD_ACK, request_id, payload, 1u);
 }
 
 /**
@@ -103,13 +109,14 @@ ign_proto_status_t ign_proto_send_ack(ign_proto_t *p, uint8_t orig_cmd)
  * @param p Указатель на контекст протокола IGN
  * @param orig_cmd Исходный код команды, вызвавшей ошибку
  * @param nack_code Код ошибки (определяется протоколом)
+ * @param request_id Идентификатор отклоняемой транзакции
  * @return Статус выполнения (IGN_PROTO_OK при успехе)
  * @details
  * Отправляет фрейм с командой IGN_CMD_NACK и полезной нагрузкой из 2 байт:
  * [nack_code][orig_cmd]
  */
-ign_proto_status_t ign_proto_send_nack(ign_proto_t *p, uint8_t orig_cmd, uint8_t nack_code)
+ign_proto_status_t ign_proto_send_nack(ign_proto_t *p, uint8_t orig_cmd, uint8_t nack_code, uint16_t request_id)
 {
 	uint8_t payload[2] = { nack_code, orig_cmd };
-	return ign_proto_tx_frame(p, IGN_CMD_NACK, payload, 2u);
+	return ign_proto_tx_frame(p, IGN_CMD_NACK, request_id, payload, 2u);
 }

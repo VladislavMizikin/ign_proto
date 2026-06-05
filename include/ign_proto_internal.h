@@ -52,6 +52,8 @@ typedef enum
 	ST_SOF1,     ///< Ожидание второго байта сигнатуры SOF (0x5A)
 	ST_LEN0,    ///< Приём младшего байта длины полезной нагрузки
 	ST_LEN1,    ///< Приём старшего байта длины полезной нагрузки (little‑endian)
+	ST_REQ0,    ///< Приём младшего байта идентификатора транзакции
+	ST_REQ1,    ///< Приём старшего байта идентификатора транзакции
 	ST_CMD,     ///< Приём кода команды
 	ST_PAYLOAD,  ///< Приём полезной нагрузки (данных)
 	ST_CRC       ///< Приём байтов CRC32 (4 байта)
@@ -63,6 +65,7 @@ typedef enum
  * @brief Отправляет фрейм протокола IGN
  * @param p Указатель на контекст протокола
  * @param cmd Код команды для отправки
+ * @param request_id Идентификатор транзакции
  * @param payload Указатель на полезные данные (может быть NULL, если payload_len == 0)
  * @param payload_len Длина полезных данных в байтах
  * @return Статус выполнения (IGN_PROTO_OK при успехе)
@@ -70,18 +73,21 @@ typedef enum
  * Формирует полный фрейм по протоколу:
  * - SOF (2 байта: 0xA5, 0x5A);
  * - длина полезной нагрузки (2 байта, little‑endian);
+ * - идентификатор транзакции (2 байта, little-endian);
  * - код команды (1 байт);
  * - полезная нагрузка (0–65 535 байт);
  * - CRC32 (4 байта).
  * Затем передаёт фрейм через функцию tx_bytes из конфигурации.
  */
 ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
+									  uint16_t request_id,
 									  const uint8_t *payload, uint16_t payload_len);
 
 /**
  * @brief Обрабатывает базовые команды протокола (диапазон 0x00–0x1F)
  * @param p Указатель на контекст протокола
  * @param cmd Код принятой команды
+ * @param request_id Идентификатор транзакции команды
  * @param payload Указатель на полезные данные
  * @param payload_len Длина полезных данных в байтах
  * @return Статус выполнения (IGN_PROTO_OK при успехе или код ошибки)
@@ -94,6 +100,7 @@ ign_proto_status_t ign_proto_tx_frame(ign_proto_t *p, uint8_t cmd,
  * возвращает IGN_PROTO_E_UNSUPPORTED.
  */
 ign_proto_status_t ign_proto_handle_core_cmd(ign_proto_t *p, uint8_t cmd,
+											 uint16_t request_id,
 											 const uint8_t *payload, uint16_t payload_len);
 
 /**

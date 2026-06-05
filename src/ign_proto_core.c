@@ -16,11 +16,11 @@
  * @param p Указатель на контекст протокола IGN
  * @return Статус выполнения (IGN_PROTO_OK при успехе или код ошибки)
  */
-static ign_proto_status_t handle_hello(ign_proto_t *p)
+static ign_proto_status_t handle_hello(ign_proto_t *p, uint16_t request_id)
 {
 	/* Response payload: 'B' 'L' version(1) */
 	const uint8_t resp[] = { 0x42u, 0x4Cu, 0x01u }; /* "BL", v1 */
-	return ign_proto_tx_frame(p, IGN_CMD_HELLO, resp, (uint16_t)sizeof(resp));
+	return ign_proto_tx_frame(p, IGN_CMD_HELLO, request_id, resp, (uint16_t)sizeof(resp));
 }
 
 /**
@@ -28,14 +28,15 @@ static ign_proto_status_t handle_hello(ign_proto_t *p)
  *
  * Обновляет время хоста в метриках протокола на основе принятых данных.
  * @param p Указатель на контекст протокола IGN
+ * @param request_id Идентификатор транзакции команды
  * @param payload Указатель на полезные данные (unix_sec + tz_min, 6 байт, LE)
  * @param len Длина полезных данных в байтах
  * @return IGN_PROTO_OK при успехе, IGN_NACK_BAD_LEN при неверной длине
  */
-static ign_proto_status_t handle_host_time(ign_proto_t *p, const uint8_t *payload, uint16_t len)
+static ign_proto_status_t handle_host_time(ign_proto_t *p, uint16_t request_id, const uint8_t *payload, uint16_t len)
 {
 	if (len != 6u) {
-		return ign_proto_send_nack(p, IGN_CMD_HOST_TIME, IGN_NACK_BAD_LEN);
+		return ign_proto_send_nack(p, IGN_CMD_HOST_TIME, IGN_NACK_BAD_LEN, request_id);
 	}
 
 	// Разбор unix_sec (4 байта, little‑endian)
@@ -50,7 +51,7 @@ static ign_proto_status_t handle_host_time(ign_proto_t *p, const uint8_t *payloa
 	p->metrics.host_tz_min = tz;
 
 	/* ACK with payload [orig_cmd] */
-	return ign_proto_send_ack(p, IGN_CMD_HOST_TIME);
+	return ign_proto_send_ack(p, IGN_CMD_HOST_TIME, request_id);
 }
 
 /**
@@ -86,10 +87,10 @@ static void wr_u32_le(uint8_t *dst, uint32_t v)
  * 20..23  u32 rx_bytes
  * 24..27  u32 rx_frames_ok
  */
-static ign_proto_status_t handle_get_metrics(ign_proto_t *p, uint16_t len)
+static ign_proto_status_t handle_get_metrics(ign_proto_t *p, uint16_t request_id, uint16_t len)
 {
 	if (len != 0u) {
-		return ign_proto_send_nack(p, IGN_CMD_GET_METRICS, IGN_NACK_BAD_LEN);
+		return ign_proto_send_nack(p, IGN_CMD_GET_METRICS, IGN_NACK_BAD_LEN, request_id);
 	}
 
 	uint8_t out[28];
@@ -107,7 +108,7 @@ static ign_proto_status_t handle_get_metrics(ign_proto_t *p, uint16_t len)
 	wr_u32_le(&out[20], p->metrics.rx_bytes);
 	wr_u32_le(&out[24], p->metrics.rx_frames_ok);
 
-	return ign_proto_tx_frame(p, IGN_CMD_GET_METRICS, out, (uint16_t)sizeof(out));
+	return ign_proto_tx_frame(p, IGN_CMD_GET_METRICS, request_id, out, (uint16_t)sizeof(out));
 }
 
 /**
@@ -116,6 +117,7 @@ static ign_proto_status_t handle_get_metrics(ign_proto_t *p, uint16_t len)
  * Диспетчеризует входящие команды в соответствии с их кодом.
  * @param p Указатель на контекст протокола IGN (не должен быть NULL)
  * @param cmd Код команды для обработки
+ * @param request_id Идентификатор транзакции команды
  * @param payload Указатель на полезные данные команды (может быть NULL, если len=0)
  * @param payload_len Длина полезных данных в байтах
  * @return Статус выполнения:
@@ -125,6 +127,7 @@ static ign_proto_status_t handle_get_metrics(ign_proto_t *p, uint16_t len)
  *  - Другие коды ошибок — в зависимости от обработчика команды
  */
 ign_proto_status_t ign_proto_handle_core_cmd(ign_proto_t *p, uint8_t cmd,
+                                             uint16_t request_id,
                                              const uint8_t *payload, uint16_t payload_len)
 {
     if (!p) {
@@ -133,13 +136,13 @@ ign_proto_status_t ign_proto_handle_core_cmd(ign_proto_t *p, uint8_t cmd,
 
     switch (cmd) {
         case IGN_CMD_HELLO:
-            return handle_hello(p);
+            return handle_hello(p, request_id);
 
         case IGN_CMD_HOST_TIME:
-            return handle_host_time(p, payload, payload_len);
+            return handle_host_time(p, request_id, payload, payload_len);
 
         case IGN_CMD_GET_METRICS:
-            return handle_get_metrics(p, payload_len);
+            return handle_get_metrics(p, request_id, payload_len);
 
         default:
             return IGN_PROTO_E_UNSUPPORTED;
