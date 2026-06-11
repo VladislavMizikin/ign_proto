@@ -1,7 +1,7 @@
 /**
  * @file ign_proto_cmdspace.h
  * @author Мизикин Владислав
- * @date 26.02.2026
+ * @date 11.06.2026
  * @brief Пространство команд протокола IGN.
  *
  * Содержит диапазоны кодов команд и определения конкретных команд,
@@ -77,6 +77,46 @@
 #define IGN_CMD_APP_VALUES_LIST      0x57u  ///< Получить страницу каталога runtime-значений
 #define IGN_CMD_APP_VALUES_SNAPSHOT  0x58u  ///< Получить страницу latest-state значений
 #define IGN_CMD_APP_VALUES_GET_DELTA 0x59u  ///< Получить накопленные изменения runtime-значений и событий
+/** @} */
+
+
+/**
+ * @defgroup IGN_CMD_APP_ADAPT Команды адаптаций
+ * @brief Команды сервисного контура адаптаций.
+ *
+ * Используются отдельно от CONFIG_*: адаптации имеют собственную сессию,
+ * staged-значения, проверку, применение, сохранение и операции сброса.
+ * @{
+ */
+#define IGN_CMD_ADAPT_OPEN             0x5Au  ///< Открыть сервисную сессию адаптаций
+#define IGN_CMD_ADAPT_STATUS           0x5Bu  ///< Получить состояние сервиса адаптаций
+#define IGN_CMD_ADAPT_LIST             0x5Cu  ///< Получить страницу каталога адаптационных объектов
+#define IGN_CMD_ADAPT_READ             0x5Du  ///< Прочитать значение адаптационного объекта
+#define IGN_CMD_ADAPT_VALIDATE         0x5Eu  ///< Проверить staged-значение адаптации
+#define IGN_CMD_ADAPT_APPLY            0x5Fu  ///< Применить staged-значение адаптации в runtime-состояние
+#define IGN_CMD_ADAPT_COMMIT           0x60u  ///< Сохранить применённые адаптации в энергонезависимое состояние
+#define IGN_CMD_ADAPT_RESET_SELECTED   0x61u  ///< Сбросить выбранный адаптационный объект
+#define IGN_CMD_ADAPT_RESET_GROUP      0x62u  ///< Сбросить группу адаптационных объектов
+#define IGN_CMD_ADAPT_CLOSE            0x63u  ///< Закрыть сервисную сессию адаптаций
+/** @} */
+
+/**
+ * @defgroup IGN_CMD_APP_DIAG Команды диагностики
+ * @brief Команды сервисного контура диагностики.
+ *
+ * Используются для чтения состояния, ошибок, событий и запуска безопасных
+ * диагностических тестов без превращения диагностики в редактор параметров.
+ * @{
+ */
+#define IGN_CMD_DIAG_STATUS            0x64u  ///< Получить краткую сводку диагностики
+#define IGN_CMD_DIAG_LIST              0x65u  ///< Получить список диагностических параметров
+#define IGN_CMD_DIAG_READ              0x66u  ///< Прочитать диагностические параметры
+#define IGN_CMD_DIAG_FAULTS            0x67u  ///< Получить активные и сохранённые ошибки
+#define IGN_CMD_DIAG_EVENTS            0x68u  ///< Получить историю диагностических событий
+#define IGN_CMD_DIAG_CLEAR_EVENTS      0x69u  ///< Очистить историю диагностических событий
+#define IGN_CMD_DIAG_TEST_LIST         0x6Au  ///< Получить список безопасных диагностических тестов
+#define IGN_CMD_DIAG_TEST_START        0x6Bu  ///< Запустить безопасный диагностический тест
+#define IGN_CMD_DIAG_TEST_STATUS       0x6Cu  ///< Получить результат последнего диагностического теста
 /** @} */
 
 /**
