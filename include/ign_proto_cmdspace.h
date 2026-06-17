@@ -1,7 +1,7 @@
 /**
  * @file ign_proto_cmdspace.h
  * @author Мизикин Владислав
- * @date 11.06.2026
+ * @date 16.06.2026
  * @brief Пространство команд протокола IGN.
  *
  * Содержит диапазоны кодов команд и определения конкретных команд,
@@ -67,6 +67,7 @@
 #define IGN_CMD_CFG_COMMIT      0x54u  ///< Применить изменения (staged → active, только RAM)
 #define IGN_CMD_CFG_CANCEL      0x55u  ///< Отменить изменения и закрыть сессию
 #define IGN_CMD_CFG_LIST        0x56u  ///< Получить список объектов конфигурации и их метаданные
+#define IGN_CMD_CFG_RESET_DEFAULTS 0x6Du  ///< Сбросить persistent-конфигурацию к значениям по умолчанию
 /** @} */
 
 /**
